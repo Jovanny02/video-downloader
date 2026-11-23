@@ -1,0 +1,11 @@
+tconst	titleType	primaryTitle	originalTitle	isAdult	startYear	endYear	runtimeMinutes	genres
+tt9900001	movie	Example Movie	Example Movie	0	2024	\N	\N	Drama
+tt9900002	tvSeries	Example Series	Example Series	0	2020	\N	\N	Drama
+tt9900003	movie	Shared Name	Shared Name	0	2020	\N	\N	Drama
+tt9900004	movie	Shared Name	Shared Name	0	2021	\N	\N	Drama
+tt9900010	tvEpisode	Chapter 0	Chapter 0	0	2021	\N	\N	Drama
+tt9900011	tvEpisode	Chapter 1	Chapter 1	0	2021	\N	\N	Drama
+tt9900012	tvEpisode	Chapter 2	Chapter 2	0	2021	\N	\N	Drama
+tt9900013	tvEpisode	Chapter 3	Chapter 3	0	2021	\N	\N	Drama
+tt9900014	tvEpisode	Chapter 1	Chapter 1	0	2021	\N	\N	Drama
+tt9900015	tvEpisode	Chapter 2	Chapter 2	0	2021	\N	\N	Drama

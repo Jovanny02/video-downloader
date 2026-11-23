@@ -1,0 +1,101 @@
+x-settings: &settings
+  PROVIDER_KEY: ${PROVIDER_KEY:-fixture}
+  METADATA_BACKEND: ${METADATA_BACKEND:-dataset}
+  FIXTURE_CATALOG: ${FIXTURE_CATALOG:-true}
+  MAX_ITEMS: ${MAX_ITEMS:-100}
+  MAX_ATTEMPTS: ${MAX_ATTEMPTS:-4}
+x-owner: &owner
+  <<: *settings
+  DATABASE_URL: postgres://vod_worker:${WORKER_PASSWORD:-local_worker}@db:5432/vod
+services:
+  db:
+    image: postgres:18-bookworm@sha256:194e55feb2597b1465dbee81cc9fd8d204566cd2eb42c8d22fd6c931a38781b1
+    environment:
+      POSTGRES_DB: vod
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_admin}
+      WORKER_PASSWORD: ${WORKER_PASSWORD:-local_worker}
+      API_PASSWORD: ${API_PASSWORD:-local_api}
+    networks: [private]
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./deploy/init-db.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U postgres -d vod"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    build: {context: ., target: api}
+    environment: *owner
+    command: ["node","dist/src/migrate.js"]
+    depends_on: {db: {condition: service_healthy}}
+    networks: [private]
+  output-init:
+    build: {context: ., target: api}
+    user: "0:0"
+    command: ["chown","1000:1000","/output"]
+    network_mode: none
+    volumes: ["${OUTPUT_DIR:-./output}:/output"]
+  api:
+    build: {context: ., target: api}
+    environment:
+      DATABASE_URL: postgres://vod_api:${API_PASSWORD:-local_api}@db:5432/vod
+      API_TOKENS: ${API_TOKENS:-}
+    depends_on: {migrate: {condition: service_completed_successfully}}
+    ports: ["127.0.0.1:${PORT:-3000}:3000"]
+    networks: [private,egress]
+    init: true
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+  worker:
+    build: {context: ., target: worker}
+    init: true
+    environment:
+      <<: *owner
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      OUTPUT_ROOT: /output
+      WRAPPER_ORIGIN: ${WRAPPER_ORIGIN:-http://127.0.0.1:8091}
+      PLAYER_BIND: ${PLAYER_BIND:-127.0.0.1}
+      FIXTURE_MODE: ${FIXTURE_MODE:-iframe}
+      VIDFAST_ORIGIN: ${VIDFAST_ORIGIN:-https://vidfast.vc}
+      VIDFAST_MODE: ${VIDFAST_MODE:-iframe}
+      VIDFAST_PLAYER_ORIGINS: ${VIDFAST_PLAYER_ORIGINS:-}
+      VIDFAST_MEDIA_ORIGINS: ${VIDFAST_MEDIA_ORIGINS:-https://vidfast.vc}
+      VIDFAST_MEDIA_PREFIX: ${VIDFAST_MEDIA_PREFIX:-}
+      VIDSRC_ORIGIN: ${VIDSRC_ORIGIN:-https://vsembed.su}
+      VIDSRC_MODE: ${VIDSRC_MODE:-iframe}
+      VIDSRC_PLAYER_ORIGINS: ${VIDSRC_PLAYER_ORIGINS:-}
+      VIDSRC_MEDIA_ORIGINS: ${VIDSRC_MEDIA_ORIGINS:-https://vsembed.su}
+      VIDSRC_MEDIA_PREFIX: ${VIDSRC_MEDIA_PREFIX:-}
+      IMDB_DATASET_ID: ${IMDB_DATASET_ID:-}
+      IMDB_REVISION_ID: ${IMDB_REVISION_ID:-}
+      IMDB_ASSET_ID: ${IMDB_ASSET_ID:-}
+      IMDB_API_KEY: ${IMDB_API_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      output-init: {condition: service_completed_successfully}
+    volumes: ["${OUTPUT_DIR:-./output}:/output"]
+    networks: [private,egress]
+    security_opt: ["seccomp=./deploy/chromium-seccomp.json","no-new-privileges:true"]
+    shm_size: 512mb
+    stop_grace_period: 65s
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:8091/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+volumes:
+  postgres:
+networks:
+  private: {internal: true}
+  egress: {}
